@@ -8,20 +8,13 @@ import os
 import io
 
 # ================= 1. 云端中文适配 =================
-# 直接设置Matplotlib字体，使用更通用的字体列表
+# 直接设置Matplotlib字体，使用最通用的设置
 plt.rcParams['font.family'] = ['sans-serif']
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
 plt.rcParams['axes.unicode_minus'] = False
 
-# 尝试加载中文字体
-try:
-    # 尝试使用系统中可能存在的中文字体
-    plt.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'DejaVu Sans', 'Arial', 'sans-serif']
-    st.success("尝试加载中文字体")
-except Exception as e:
-    st.warning(f"加载中文字体失败: {str(e)}")
-    # 回退到默认字体
-    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
+# 不需要尝试加载中文字体，直接使用通用字体
+st.success("使用通用字体设置")
 
 # 设置样式
 plt.rcParams['axes.titlesize'] = 14
