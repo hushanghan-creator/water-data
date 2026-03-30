@@ -8,30 +8,20 @@ import os
 import io
 
 # ================= 1. 云端中文适配 =================
-# 检查并加载SimsunExtG.ttf字体
-prop = None
-font_path = os.path.join(os.path.dirname(__file__), 'SimsunExtG.ttf')
-if os.path.exists(font_path):
-    try:
-        # 直接使用字体路径，不依赖字体管理器
-        prop = fm.FontProperties(fname=font_path)
-        # 设置字体
-        plt.rcParams['font.sans-serif'] = ['SimSun']
-        plt.rcParams['font.family'] = ['sans-serif']
-        plt.rcParams['axes.unicode_minus'] = False
-        st.success("成功加载SimsunExtG.ttf字体")
-    except Exception as e:
-        st.warning(f"加载SimsunExtG.ttf字体失败: {str(e)}")
-        # 使用默认字体
-        plt.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'Arial Unicode MS', 'DejaVu Sans']
-        plt.rcParams['font.family'] = ['sans-serif']
-        plt.rcParams['axes.unicode_minus'] = False
-else:
-    st.warning(f"未找到SimsunExtG.ttf字体文件，路径: {font_path}")
-    # 使用默认字体
-    plt.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'Arial Unicode MS', 'DejaVu Sans']
-    plt.rcParams['font.family'] = ['sans-serif']
-    plt.rcParams['axes.unicode_minus'] = False
+# 直接设置Matplotlib字体，使用更通用的字体列表
+plt.rcParams['font.family'] = ['sans-serif']
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
+plt.rcParams['axes.unicode_minus'] = False
+
+# 尝试加载中文字体
+try:
+    # 尝试使用系统中可能存在的中文字体
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'DejaVu Sans', 'Arial', 'sans-serif']
+    st.success("尝试加载中文字体")
+except Exception as e:
+    st.warning(f"加载中文字体失败: {str(e)}")
+    # 回退到默认字体
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
 
 # 设置样式
 plt.rcParams['axes.titlesize'] = 14
@@ -98,77 +88,73 @@ if uploaded_file:
             st.error("未找到数值列，请检查数据文件")
             st.stop()
         
-        # 数据清洗
-        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        # 数据预处理
+        # 转换时间列
+        try:
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        except:
+            st.warning("时间列转换失败，使用原始值")
         
-        # 转换目标列为数值，并检查数据范围
+        # 转换数值列并处理缺失值
         for col in target_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce')
         
-        # 显示数据预览，帮助调试
-        st.subheader("数据预览")
-        st.dataframe(df[[date_col] + target_cols].head(10))
+        # 移除时间列或数值列为空的行
+        df = df.dropna(subset=[date_col] + target_cols)
         
-        # 显示数据统计信息
-        st.subheader("数据统计")
-        st.write(f"数据量: {len(df)}")
-        for col in target_cols:
-            st.write(f"{col} 最小值: {df[col].min()}")
-            st.write(f"{col} 最大值: {df[col].max()}")
-            st.write(f"{col} 平均值: {df[col].mean()}")
+        # 按时间排序
+        if pd.api.types.is_datetime64_any_dtype(df[date_col]):
+            df = df.sort_values(by=date_col)
         
-        # 清洗数据
-        df = df.dropna(subset=[date_col] + target_cols).sort_values(date_col)
-        
-        # 检查数据是否有效
-        if len(df) == 0:
-            st.error("数据清洗后无有效数据，请检查选择的列")
-            st.stop()
-        
-        # ================= 3. 稳健统计算法 (IQR) =================
-        def calculate_stats(series):
-            raw_mean = series.mean()
-            raw_cv = (series.std() / raw_mean) * 100 if raw_mean != 0 else 0
-            
-            # IQR 准则
-            q1 = series.quantile(0.25)
-            q3 = series.quantile(0.75)
-            iqr = q3 - q1
-            lower_b = max(0, q1 - 1.5 * iqr)
-            upper_b = q3 + 1.5 * iqr
-            
-            clean_s = series[(series >= lower_b) & (series <= upper_b)]
-            robust_mean = clean_s.mean()
-            robust_cv = (clean_s.std() / robust_mean) * 100 if robust_mean != 0 else 0
-            
-            return {
-                "raw_mean": raw_mean,
-                "raw_cv": raw_cv,
-                "robust_mean": robust_mean,
-                "robust_cv": robust_cv,
-                "bounds": [lower_b, upper_b],
-                "outliers": len(series) - len(clean_s),
-                "clean_series": clean_s
-            }
-        
-        # 计算每个目标列的统计信息
+        # ================= 3. 计算统计指标 =================
+        # 计算每个目标列的统计指标
         stats_results = {}
         for col in target_cols:
-            stats_results[col] = calculate_stats(df[col])
+            # 计算基本统计量
+            data = df[col].dropna()
+            
+            # 计算四分位数和IQR
+            Q1 = data.quantile(0.25)
+            Q3 = data.quantile(0.75)
+            IQR = Q3 - Q1
+            
+            # 检测异常值
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            outliers = data[(data < lower_bound) | (data > upper_bound)]
+            
+            # 计算稳健统计量（基于IQR）
+            robust_mean = data.median()
+            robust_cv = (IQR / 1.349) / robust_mean if robust_mean > 0 else 0
+            
+            # 计算原始统计量
+            original_mean = data.mean()
+            original_std = data.std()
+            original_cv = original_std / original_mean if original_mean > 0 else 0
+            
+            stats_results[col] = {
+                'data': data,
+                'clean_series': data[(data >= lower_bound) & (data <= upper_bound)],
+                'original_mean': original_mean,
+                'original_std': original_std,
+                'original_cv': original_cv,
+                'robust_mean': robust_mean,
+                'robust_cv': robust_cv,
+                'Q1': Q1,
+                'Q3': Q3,
+                'IQR': IQR,
+                'outliers': outliers,
+                'outlier_count': len(outliers)
+            }
         
-        # ================= 4. 结果展示 =================
-        # 添加图表设置功能
+        # 图表设置
         st.sidebar.subheader('第三步：图表设置')
-        chart_title = st.sidebar.text_input('趋势图标题', f'{"、".join(target_cols)}趋势分析')
-        
-        # X轴和Y轴名称编辑
+        chart_title = st.sidebar.text_input('趋势图标题', '水质数据趋势分析')
         x_axis_label = st.sidebar.text_input('X轴名称', '日期')
-        y1_axis_label = st.sidebar.text_input('左侧Y轴名称', '数值')
+        y_axis_label = st.sidebar.text_input('Y轴名称', '数值')
         
         # 双Y轴设置
         use_secondary_y = st.sidebar.checkbox('使用双Y轴', value=False)
-        y2_axis_label = ''
-        secondary_y_cols = []
         if use_secondary_y:
             y2_axis_label = st.sidebar.text_input('右侧Y轴名称', '数值')
             secondary_y_cols = st.sidebar.multiselect('右侧Y轴数据列', target_cols, default=[])
@@ -201,26 +187,30 @@ if uploaded_file:
         # 顶层关键指标卡片 - 为每个目标列显示统计信息
         st.subheader("统计指标")
         for col in target_cols:
-            stats_res = stats_results[col]
-            st.write(f"**{col}**")
-            c1, c2, c3, c4, c5 = st.columns(5)
-            c1.metric("原始均值", f"{stats_res['raw_mean']:.2f}")
-            c2.metric("原始CV值", f"{stats_res['raw_cv']:.2f}%")
-            c3.metric("稳健均值", f"{stats_res['robust_mean']:.2f}")
-            c4.metric("稳健CV值", f"{stats_res['robust_cv']:.2f}%")
-            c5.metric("异常点数量", f"{stats_res['outliers']}")
+            with st.expander(f"{col}统计指标"):
+                col1, col2, col3, col4, col5 = st.columns(5)
+                with col1:
+                    st.metric("原始均值", f"{stats_results[col]['original_mean']:.2f}")
+                with col2:
+                    st.metric("原始CV", f"{stats_results[col]['original_cv']:.2%}")
+                with col3:
+                    st.metric("稳健均值", f"{stats_results[col]['robust_mean']:.2f}")
+                with col4:
+                    st.metric("稳健CV", f"{stats_results[col]['robust_cv']:.2%}")
+                with col5:
+                    st.metric("异常值数量", stats_results[col]['outlier_count'])
         
-        # 图表区域
-        tab1, tab2, tab3 = st.tabs(["📈 趋势折线图", "📊 频率分布直方图", "📋 异常值清单"])
+        # ================= 4. 多列数据趋势图 =================
+        tab1, tab2, tab3 = st.tabs(["趋势折线图", "频率分布直方图", "异常值清单"])
         
         with tab1:
-            fig_line, ax_line = plt.subplots(figsize=(12, 5))
+            st.subheader(chart_title)
+            
+            # 创建图表
+            fig_line, ax_line = plt.subplots(figsize=(12, 7))
             ax2 = None
             
-            # 定义颜色列表
-            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-            
-            # 如果使用双Y轴，创建第二个Y轴
+            # 使用双Y轴
             if use_secondary_y and secondary_y_cols:
                 ax2 = ax_line.twinx()
                 ax2.set_ylabel(y2_axis_label)
@@ -240,21 +230,18 @@ if uploaded_file:
             # 设置标题和标签
             ax_line.set_title(chart_title, pad=15)
             ax_line.set_xlabel(x_axis_label)
-            ax_line.set_ylabel(y1_axis_label)
+            ax_line.set_ylabel(y_axis_label)
             
             # 合并图例
-            handles1, labels1 = ax_line.get_legend_handles_labels()
-            handles2, labels2 = [], []
-            if ax2:
-                handles2, labels2 = ax2.get_legend_handles_labels()
-            combined_handles = handles1 + handles2
-            combined_labels = labels1 + labels2
-            ax_line.legend(combined_handles, combined_labels, fontsize=10, loc='upper left')
-            
-            plt.xticks(rotation=45)
-            ax_line.set_facecolor('white')
+            if use_secondary_y and secondary_y_cols:
+                lines1, labels1 = ax_line.get_legend_handles_labels()
+                lines2, labels2 = ax2.get_legend_handles_labels()
+                ax_line.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+            else:
+                ax_line.legend()
             
             # 调整布局
+            plt.xticks(rotation=45)
             plt.tight_layout()
             st.pyplot(fig_line)
             
@@ -263,7 +250,7 @@ if uploaded_file:
             fig_line.savefig(buf, format='png', dpi=300, bbox_inches='tight')
             buf.seek(0)
             st.download_button(
-                label="下载高清趋势图",
+                label="下载趋势图",
                 data=buf,
                 file_name=f"{chart_title}_趋势图.png",
                 mime="image/png"
@@ -339,14 +326,26 @@ if uploaded_file:
         with tab3:
             for col in target_cols:
                 st.subheader(f"{col}异常值清单")
-                stats_res = stats_results[col]
-                outliers_df = df[(df[col] < stats_res['bounds'][0]) | (df[col] > stats_res['bounds'][1])]
-                st.write(f"正常运行区间设定为: **{stats_res['bounds'][0]:.2f} ~ {stats_res['bounds'][1]:.2f}**")
-                st.dataframe(outliers_df[[date_col, col]])
-
+                outliers = stats_results[col]['outliers']
+                if len(outliers) > 0:
+                    # 找到异常值对应的行
+                    outlier_rows = df[df[col].isin(outliers)]
+                    st.dataframe(outlier_rows[[date_col, col]])
+                    
+                    # 下载异常值清单
+                    csv = outlier_rows[[date_col, col]].to_csv(index=False)
+                    st.download_button(
+                        label=f"下载{col}异常值",
+                        data=csv,
+                        file_name=f"{col}_异常值.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.info(f"{col}无异常值")
+        
     except Exception as e:
-        st.error(f"解析出错：{str(e)}")
-        st.info("提示：请确保选择了正确的列。")
-
+        st.error(f"数据处理错误: {str(e)}")
+        import traceback
+        st.text(traceback.format_exc())
 else:
     st.info("💡 请在左侧上传 Excel 或 CSV 数据文件开始分析。")
