@@ -10,7 +10,7 @@ import io
 # ================= 1. 云端中文适配 =================
 # 检查并加载SimsunExtG.ttf字体
 prop = None
-font_path = os.path.abspath('SimsunExtG.ttf')
+font_path = os.path.join(os.path.dirname(__file__), 'SimsunExtG.ttf')
 if os.path.exists(font_path):
     try:
         # 直接使用字体路径，不依赖字体管理器
@@ -23,13 +23,13 @@ if os.path.exists(font_path):
     except Exception as e:
         st.warning(f"加载SimsunExtG.ttf字体失败: {str(e)}")
         # 使用默认字体
-        plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'DejaVu Sans']
+        plt.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'Arial Unicode MS', 'DejaVu Sans']
         plt.rcParams['font.family'] = ['sans-serif']
         plt.rcParams['axes.unicode_minus'] = False
 else:
     st.warning(f"未找到SimsunExtG.ttf字体文件，路径: {font_path}")
     # 使用默认字体
-    plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'DejaVu Sans']
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'Arial Unicode MS', 'DejaVu Sans']
     plt.rcParams['font.family'] = ['sans-serif']
     plt.rcParams['axes.unicode_minus'] = False
 
