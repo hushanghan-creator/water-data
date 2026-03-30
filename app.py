@@ -8,13 +8,27 @@ import os
 import io
 
 # ================= 1. 云端中文适配 =================
-# 直接设置Matplotlib字体，使用最通用的设置
-plt.rcParams['font.family'] = ['sans-serif']
-plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
-plt.rcParams['axes.unicode_minus'] = False
+# 尝试加载本地中文字体，如果失败则使用通用字体
+try:
+    # 尝试使用本地字体文件
+    font_path = os.path.join(os.path.dirname(__file__), 'SimsunExtG.ttf')
+    if os.path.exists(font_path):
+        # 加载本地字体
+        plt.rcParams['font.family'] = ['sans-serif']
+        plt.rcParams['font.sans-serif'] = ['SimSun', 'DejaVu Sans', 'Arial', 'sans-serif']
+        st.success("使用本地中文字体")
+    else:
+        # 本地没有字体文件，使用通用字体
+        plt.rcParams['font.family'] = ['sans-serif']
+        plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
+        st.success("使用通用字体设置")
+except Exception as e:
+    # 异常情况下使用通用字体
+    plt.rcParams['font.family'] = ['sans-serif']
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
+    st.warning(f"字体设置异常: {str(e)}")
 
-# 不需要尝试加载中文字体，直接使用通用字体
-st.success("使用通用字体设置")
+plt.rcParams['axes.unicode_minus'] = False
 
 # 设置样式
 plt.rcParams['axes.titlesize'] = 14
